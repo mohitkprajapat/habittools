@@ -1,5 +1,6 @@
 <meta charset="utf-8">
 <title>Habit Ledger</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23efeae0'/%3E%3Crect x='10' y='8' width='44' height='48' rx='4' fill='%23fbf8f2' stroke='%232f4858' stroke-width='3'/%3E%3Cline x1='18' y1='20' x2='46' y2='20' stroke='%23ddd6c7' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='18' y1='30' x2='46' y2='30' stroke='%23ddd6c7' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M20 42 L28 50 L46 32' fill='none' stroke='%234a7a52' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 @font-face {
   font-family: 'Zilla Ledger';
@@ -191,7 +192,8 @@ h1 {
   gap: 0.5rem;
   width: 100%;
 }
-.source-inputs input[type="url"] {
+.source-inputs input[type="url"],
+.source-inputs input[type="text"] {
   flex: 1;
   min-width: 0;
   font: inherit;
@@ -203,7 +205,8 @@ h1 {
   border-radius: 7px;
   padding: 0.55rem 0.7rem;
 }
-.source-inputs input[type="url"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.source-inputs input[type="url"]:focus-visible,
+.source-inputs input[type="text"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .source-remember {
   display: flex;
   align-items: center;
@@ -718,9 +721,18 @@ td.num { font-variant-numeric: tabular-nums; }
       <div class="source-row">
         <span class="source-divider">or load automatically from a link</span>
         <div class="source-inputs">
-          <input type="url" id="sourceUrl" placeholder="https://raw.githubusercontent.com/user/repo/branch/backup.db" />
+          <input type="url" id="sourceUrl" placeholder="https://raw.githubusercontent.com/user/repo/branch/backup.db or a Google Drive folder link" />
           <button class="btn ghost" id="loadUrlBtn" type="button">Load</button>
         </div>
+        <div class="source-inputs hidden" id="driveKeyRow">
+          <input type="text" id="driveApiKey" placeholder="Google Drive API key" autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="source-hint hidden" id="driveKeyHint">
+          Google Drive folders need a Drive API key to load in the browser &mdash; create one (restricted to the
+          Drive API) at <strong style="color:var(--ink)">console.cloud.google.com</strong> and paste it above.
+          The most recently uploaded <code>.db</code> file in the folder is loaded automatically each time.
+          The key is saved only in this browser's local storage and sent only to Google.
+        </p>
         <label class="source-remember">
           <input type="checkbox" id="rememberSource" checked />
           Remember this link and load it automatically next time
@@ -982,6 +994,28 @@ else if (typeof exports === 'object'){
   var activeSourceBar = document.getElementById("activeSourceBar");
   var activeSourceText = document.getElementById("activeSourceText");
   var changeSourceBtn = document.getElementById("changeSourceBtn");
+  var driveKeyRow = document.getElementById("driveKeyRow");
+  var driveKeyHint = document.getElementById("driveKeyHint");
+  var driveApiKeyInput = document.getElementById("driveApiKey");
+  var DRIVE_KEY_KEY = "habitLedgerDriveApiKey";
+
+  function driveFolderIdFromUrl(url) {
+    var m = url.match(/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([^/?]+)/)
+      || url.match(/drive\.google\.com\/(?:open|folderview)\?(?:.*&)?id=([^&]+)/);
+    return m ? m[1] : null;
+  }
+
+  function updateDriveKeyVisibility() {
+    var isDrive = !!driveFolderIdFromUrl(sourceUrlInput.value.trim());
+    driveKeyRow.classList.toggle("hidden", !isDrive);
+    driveKeyHint.classList.toggle("hidden", !isDrive);
+  }
+  sourceUrlInput.addEventListener("input", updateDriveKeyVisibility);
+  (function initDriveKey() {
+    var saved;
+    try { saved = localStorage.getItem(DRIVE_KEY_KEY); } catch (e) { saved = null; }
+    if (saved) driveApiKeyInput.value = saved;
+  })();
 
   var sqlReady = null;
   function getSql() {
@@ -1030,6 +1064,10 @@ else if (typeof exports === 'object'){
     } else {
       try { localStorage.removeItem(SOURCE_URL_KEY); } catch (e) { /* ignore */ }
     }
+    var driveKey = driveApiKeyInput.value.trim();
+    if (driveKey) {
+      try { localStorage.setItem(DRIVE_KEY_KEY, driveKey); } catch (e) { /* ignore */ }
+    }
     loadFromUrl(url);
   }
   loadUrlBtn.addEventListener("click", loadUrlFromInput);
@@ -1040,6 +1078,7 @@ else if (typeof exports === 'object'){
     try { localStorage.removeItem(SOURCE_URL_KEY); } catch (e) { /* ignore */ }
     sourceUrlInput.value = "";
     sourceForgetHint.classList.add("hidden");
+    updateDriveKeyVisibility();
   });
   changeSourceBtn.addEventListener("click", function () {
     activeSourceBar.classList.add("hidden");
@@ -1055,6 +1094,7 @@ else if (typeof exports === 'object'){
     if (saved) {
       sourceUrlInput.value = saved;
       sourceForgetHint.classList.remove("hidden");
+      updateDriveKeyVisibility();
       loadFromUrl(saved);
     }
   })();
@@ -1111,6 +1151,11 @@ else if (typeof exports === 'object'){
   }
 
   function loadFromUrl(url) {
+    var folderId = driveFolderIdFromUrl(url);
+    if (folderId) {
+      loadLatestFromDriveFolder(folderId, url);
+      return;
+    }
     setBusy();
     fetch(url, { cache: "no-store" }).then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1119,6 +1164,49 @@ else if (typeof exports === 'object'){
       loadFromBytes(new Uint8Array(buf), url);
     }).catch(function (err) {
       showError("Could not fetch that URL: " + err.message + ". Check the link is correct and the repo is public.");
+    });
+  }
+
+  function driveApiError(res) {
+    if (res.status === 403 || res.status === 401) {
+      return new Error("Google rejected the request (HTTP " + res.status + "). Check the API key is valid, the Drive API is enabled for it, and the folder is shared as \"anyone with the link\".");
+    }
+    if (res.status === 404) {
+      return new Error("Folder not found. Check the folder is shared as \"anyone with the link can view\".");
+    }
+    return new Error("HTTP " + res.status);
+  }
+
+  function loadLatestFromDriveFolder(folderId, originalUrl) {
+    var key = driveApiKeyInput.value.trim();
+    if (!key) {
+      showError("This looks like a Google Drive folder link. Paste a Drive API key above (see the note below the field), then load again.");
+      return;
+    }
+    setBusy();
+    var q = "'" + folderId + "' in parents and trashed = false and name contains '.db'";
+    var listUrl = "https://www.googleapis.com/drive/v3/files"
+      + "?q=" + encodeURIComponent(q)
+      + "&orderBy=" + encodeURIComponent("createdTime desc")
+      + "&pageSize=1"
+      + "&fields=" + encodeURIComponent("files(id,name,createdTime)")
+      + "&key=" + encodeURIComponent(key);
+    fetch(listUrl, { cache: "no-store" }).then(function (res) {
+      if (!res.ok) throw driveApiError(res);
+      return res.json();
+    }).then(function (data) {
+      var file = data.files && data.files[0];
+      if (!file) throw new Error("No .db files found in that folder.");
+      var mediaUrl = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(file.id)
+        + "?alt=media&key=" + encodeURIComponent(key);
+      return fetch(mediaUrl, { cache: "no-store" }).then(function (res) {
+        if (!res.ok) throw driveApiError(res);
+        return res.arrayBuffer();
+      }).then(function (buf) {
+        loadFromBytes(new Uint8Array(buf), "Drive folder (latest: " + file.name + ")");
+      });
+    }).catch(function (err) {
+      showError("Could not load the latest file from that Drive folder: " + err.message);
     });
   }
 
