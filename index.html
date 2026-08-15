@@ -999,6 +999,15 @@ else if (typeof exports === 'object'){
   var driveApiKeyInput = document.getElementById("driveApiKey");
   var DRIVE_KEY_KEY = "habitLedgerDriveApiKey";
 
+  // Injected at deploy time by .github/workflows/deploy.yml from repo secrets.
+  // Left as literal placeholders when opened locally without going through that workflow.
+  var DEFAULT_DRIVE_FOLDER_URL = "${DRIVE_FOLDER_URL}";
+  var DEFAULT_DRIVE_API_KEY = "${DRIVE_API_KEY}";
+  function hasDefaultDriveSource() {
+    return DEFAULT_DRIVE_FOLDER_URL && DEFAULT_DRIVE_FOLDER_URL.indexOf("${") === -1
+      && DEFAULT_DRIVE_API_KEY && DEFAULT_DRIVE_API_KEY.indexOf("${") === -1;
+  }
+
   function driveFolderIdFromUrl(url) {
     var m = url.match(/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([^/?]+)/)
       || url.match(/drive\.google\.com\/(?:open|folderview)\?(?:.*&)?id=([^&]+)/);
@@ -1096,6 +1105,13 @@ else if (typeof exports === 'object'){
       sourceForgetHint.classList.remove("hidden");
       updateDriveKeyVisibility();
       loadFromUrl(saved);
+      return;
+    }
+    if (hasDefaultDriveSource()) {
+      sourceUrlInput.value = DEFAULT_DRIVE_FOLDER_URL;
+      driveApiKeyInput.value = DEFAULT_DRIVE_API_KEY;
+      updateDriveKeyVisibility();
+      loadFromUrl(DEFAULT_DRIVE_FOLDER_URL);
     }
   })();
 
