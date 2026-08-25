@@ -1637,7 +1637,7 @@ else if (typeof exports === 'object'){
     listHeadRow.appendChild(mkEl("div", { class: "list-head-spacer" }));
     var headDays = mkEl("div", { class: "list-head-days" });
     var todayKey = dayKey(Date.now());
-    for (var i = SUMMARY_DAYS - 1; i >= 0; i--) {
+    for (var i = 0; i < SUMMARY_DAYS; i++) {
       var k = todayKey - i * 86400000;
       var d = new Date(k);
       headDays.appendChild(mkEl("div", { class: "list-head-day" }, [
@@ -1736,7 +1736,7 @@ else if (typeof exports === 'object'){
     var completedSet = new Set(keys);
     var byDayVal = {};
     reps.forEach(function (r) { byDayVal[dayKey(r.timestamp)] = r.value; });
-    for (var i = SUMMARY_DAYS - 1; i >= 0; i--) {
+    for (var i = 0; i < SUMMARY_DAYS; i++) {
       var k = todayKey - i * 86400000;
       var has = completedSet.has(k);
       var cell;
