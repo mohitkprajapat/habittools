@@ -998,6 +998,7 @@ else if (typeof exports === 'object'){
   var driveKeyHint = document.getElementById("driveKeyHint");
   var driveApiKeyInput = document.getElementById("driveApiKey");
   var DRIVE_KEY_KEY = "habitLedgerDriveApiKey";
+  var SUMMARY_DAYS = 7;
 
   // Injected at deploy time by .github/workflows/deploy.yml from repo secrets.
   // Left as literal placeholders when opened locally without going through that workflow.
@@ -1628,7 +1629,7 @@ else if (typeof exports === 'object'){
     habitsLabel.textContent = habits.length + (habits.length === 1 ? " habit" : " habits") +
       (minTs && maxTs ? ", " + fmtDate(minTs) + " – " + fmtDate(maxTs) : "");
 
-    // list header: last 5 days, like the app's Habits screen
+    // list header: last N days, like the app's Habits screen
     var listHeadRow = document.getElementById("listHeadRow");
     listHeadRow.innerHTML = "";
     listHeadRow.appendChild(mkEl("div", { style: "width:9px;flex-shrink:0" }));
@@ -1636,7 +1637,7 @@ else if (typeof exports === 'object'){
     listHeadRow.appendChild(mkEl("div", { class: "list-head-spacer" }));
     var headDays = mkEl("div", { class: "list-head-days" });
     var todayKey = dayKey(Date.now());
-    for (var i = 4; i >= 0; i--) {
+    for (var i = SUMMARY_DAYS - 1; i >= 0; i--) {
       var k = todayKey - i * 86400000;
       var d = new Date(k);
       headDays.appendChild(mkEl("div", { class: "list-head-day" }, [
@@ -1645,6 +1646,7 @@ else if (typeof exports === 'object'){
       ]));
     }
     listHeadRow.appendChild(headDays);
+    listHeadRow.appendChild(mkEl("span", { class: "chev", style: "visibility:hidden", html: "&#8250;" }));
 
     cardsEl.innerHTML = "";
     if (!habits.length) {
@@ -1728,13 +1730,13 @@ else if (typeof exports === 'object'){
     head.appendChild(mkEl("div", { class: "card-sub", text: frequencyLabel(h) }));
     summary.appendChild(head);
 
-    // last-5-days strip, matching the app's list row
+    // last-N-days strip, matching the app's list row
     var strip = mkEl("div", { class: "day-strip" });
     var todayKey = dayKey(Date.now());
     var completedSet = new Set(keys);
     var byDayVal = {};
     reps.forEach(function (r) { byDayVal[dayKey(r.timestamp)] = r.value; });
-    for (var i = 4; i >= 0; i--) {
+    for (var i = SUMMARY_DAYS - 1; i >= 0; i--) {
       var k = todayKey - i * 86400000;
       var has = completedSet.has(k);
       var cell;
